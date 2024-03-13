@@ -1,5 +1,6 @@
 import socket
 
+
 class Robot:
 
     def __init__(self):
@@ -32,11 +33,12 @@ class Robot:
         self.client_socket.close()
         self.server_socket.close()
 
+
 if __name__ == "__main__":
     robot = Robot()
     try:
         robot.open_socket()
-        robot.cast_message("answer;", "100", "150")
+        robot.cast_message("answer;", "100", "150", "angle")
         robot.send_message(robot.message)
         received_message = robot.receive_message()
         print(f"Получено сообщение от клиента: {received_message}")

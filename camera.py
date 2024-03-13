@@ -2,7 +2,6 @@ from typing import Optional, Any
 from pypylon import pylon
 import cv2
 
-
 class Camera:
     """
     Класс для работы с камерой, получения изображений и их отображения.
