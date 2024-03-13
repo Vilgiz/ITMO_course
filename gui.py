@@ -8,6 +8,7 @@ import json
 from image import Image
 from camera import Camera
 from robot import Robot
+import asyncio
 
 
 class VideoPlayer(QMainWindow):
