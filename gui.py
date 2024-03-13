@@ -17,7 +17,7 @@ class VideoPlayer(QMainWindow):
         # self.camera = Camera()
         self.robot = Robot()
         self.camera = cv2.VideoCapture(
-            "Basler_acA2000-165um__22729612__20240313_134953200.avi")
+            "Basler_acA2000-165um__22729612__20240313_134953200.mp4")
 
         # try:
         #     self.robot.open_socket()
