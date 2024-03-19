@@ -1,13 +1,12 @@
 import sys
-from PyQt6.QtCore import QTimer
+from PyQt6.QtCore import QTimer, Qt
 from PyQt6.QtGui import QImage, QPixmap
 from PyQt6.QtWidgets import QApplication, QLabel, QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, QSlider
 import cv2
-from PyQt6.QtCore import Qt
 import json
 from image import Image
-from camera import Camera
 from robot import Robot
+import threading
 import asyncio
 
 
@@ -15,15 +14,10 @@ class VideoPlayer(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        # self.camera = Camera()
-        self.robot = Robot()
         self.camera = cv2.VideoCapture(
             "Basler_acA2000-165um__22729612__20240313_134953200.mp4")
 
-        # try:
-        #     self.robot.open_socket()
-        # except Exception as e:
-        #     print(f"Исключение: {e}")
+        self.robot = Robot('127.0.0.1', 48569)
 
         self.width_frame = None
         self.height_frame = None
@@ -34,13 +28,14 @@ class VideoPlayer(QMainWindow):
         self.threshold_2_value = 0
         self.blur_value = 0
         self.dilate_value = 0
+        self.num_of_frame = 0
 
         self.start_flag = True
         self.start_robot_flag = False
 
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_frame)
-        self.timer.start(10)  # Обновление каждые 10 миллисекунд
+        self.timer.start(10)
 
         self.__init_main_window()
         self.__init_layouts()
@@ -61,12 +56,12 @@ class VideoPlayer(QMainWindow):
     def __init_widgets(self):
         self.video_label = QLabel()
 
-        self.brigh_fac_slider = QSlider(objectName="brigh_fac_slider")
-        self.sat_fac_slider = QSlider(objectName="sat_fac_slider")
-        self.threshold_2_slider = QSlider(objectName="threshold_2_slider")
-        self.threshold_3_slider = QSlider(objectName="threshold_3_slider")
-        self.blur_slider = QSlider(objectName="blur_slider")
-        self.dilate_slider = QSlider(objectName="dilate_slider")
+        self.brigh_fac_slider = QSlider(Qt.Orientation.Horizontal)
+        self.sat_fac_slider = QSlider(Qt.Orientation.Horizontal)
+        self.threshold_2_slider = QSlider(Qt.Orientation.Horizontal)
+        self.threshold_3_slider = QSlider(Qt.Orientation.Horizontal)
+        self.blur_slider = QSlider(Qt.Orientation.Horizontal)
+        self.dilate_slider = QSlider(Qt.Orientation.Horizontal)
 
         self.brigh_fac_label = QLabel("Настройка яркости")
         self.sat_fac_label = QLabel("Настройка насыщения")
@@ -74,8 +69,7 @@ class VideoPlayer(QMainWindow):
             "Настройка чувствительность обнаружения № 2")
         self.threshold_3_label = QLabel(
             "Настройка чувствительность обнаружения № 3")
-        self.blur_label = QLabel(
-            "Настройка размытия")
+        self.blur_label = QLabel("Настройка размытия")
         self.dilate_label = QLabel("Настройка заполнения")
 
         self.detect_detail_label = QLabel("Обнаружено деталей:")
@@ -126,7 +120,6 @@ class VideoPlayer(QMainWindow):
         }
 
         for slider, label in self.slider_label_mapping.items():
-            slider.setOrientation(Qt.Orientation.Horizontal)
             slider.setMinimum(0)
             slider.setMaximum(255)
             slider.valueChanged.connect(self.on_slider_value_changed)
@@ -136,8 +129,7 @@ class VideoPlayer(QMainWindow):
                 try:
                     data = json.load(json_file)
                 except json.JSONDecodeError:
-                    raise ValueError(
-                        "Ошибка при чтении файла с данными.")
+                    raise ValueError("Ошибка при чтении файла с данными.")
 
             self.brigh_fac_value = data.get('brigh', [])
             self.sat_fac_value = data.get('sat', [])
@@ -165,17 +157,15 @@ class VideoPlayer(QMainWindow):
         frame = image.image_correction(frame)
         self.height_frame, self.width_frame, _ = frame.shape
         self.video_label.setMinimumSize(
-            int(self.width_frame*2), int(self.height_frame*2))  # TODO Костыль
+            int(self.width_frame*2), int(self.height_frame*2))
 
     def update_frame(self):
         ret, frame = self.camera.read()
         self.image = Image(frame)
 
-        self.image.brightness_factor = self.brigh_fac_value   # TODO - Это костыль,
-        # self.image.saturation_factor = self.sat_fac_value     # TODO переобозначаю значения
-        self.image.threshold_3 = self.threshold_3_value       # TODO калибров чтобы данные
+        self.image.brightness_factor = self.brigh_fac_value
+        self.image.threshold_3 = self.threshold_3_value
         self.image.threshold_2 = self.threshold_2_value
-        # TODO брал из gui при соз
         self.image.dilate = self.dilate_value
         self.image.blur = self.blur_value
 
@@ -188,33 +178,29 @@ class VideoPlayer(QMainWindow):
         frame = cv2.resize(frame, None, fx=2, fy=2,
                            interpolation=cv2.INTER_AREA)
         self.height_frame, self.width_frame, _ = frame.shape
-        bytes_per_line = 3 * self.width_frame  # Для RGB888 (3 канала)
+        bytes_per_line = 3 * self.width_frame
         q_image = QImage(frame.data, self.width_frame, self.height_frame,
                          bytes_per_line, QImage.Format.Format_BGR888)
 
-        # Отображение изображения в QLabel
         self.video_label.setPixmap(QPixmap.fromImage(q_image))
         self.detect_detail_label.setText(
             f"Обнаружено деталей: {len(self.coordinates)}")
+        self.num_of_frame = self.num_of_frame + 1
 
-        # if len(self.coordinates) != 0:
-        # self.robot_communication()
+        if len(self.coordinates) != 0 and self.num_of_frame == 20:
+            self.num_of_frame = 0
+            self.robot_communication()
 
     def robot_communication(self):
-        self.robot.received_message = self.robot.receive_message()
+        message = ";".join(("move", str(
+            self.coordinates[0][1] + 7), str(self.coordinates[0][0] + 5), str(self.orientation[0])))
+        self.robot.send_message(message)
 
-        if self.robot.received_message == "heartbeat":
-            self.robot.cast_message(
-                "move", f"{self.coordinates[0][1]+7}", f"{self.coordinates[0][0]+5}", f"{self.orientation[0]}")
-            self.robot.send_message(self.robot.message)
-        elif self.robot.received_message == "Moving":
-            self.robot.cast_message("heartbeat", f"0", f"0", f"angle")
-            self.robot.send_message(self.robot.message)
-            print(self.robot.received_message)
+    async def start_server(self):
+        await self.robot.start_server()  # Предположим, что это асинхронная функция
 
     def closeEvent(self, event):
         self.robot.close_socket()
-        # self.camera.end()
         event.accept()
 
     def on_slider_value_changed(self, value):
@@ -254,15 +240,23 @@ class VideoPlayer(QMainWindow):
         with open('video_parametrs.json', 'w') as json_file:
             json.dump(data, json_file)
 
-        self.image.brightness_factor = self.brigh_fac_value     # TODO - плохо
-        self.image.threshold_3 = self.threshold_3_value         # TODO - плохо
-        self.image.threshold_2 = self.threshold_2_value         # TODO - плохо
-        self.image.blur = self.threshold_3_value         # TODO - плохо
-        self.image.dilate = self.threshold_2_value         # TODO - плохо
+        self.image.brightness_factor = self.brigh_fac_value
+        self.image.threshold_3 = self.threshold_3_value
+        self.image.threshold_2 = self.threshold_2_value
+        self.image.blur = self.threshold_3_value
+        self.image.dilate = self.threshold_2_value
+
+
+def run_server():
+    asyncio.run(player.start_server())
 
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     player = VideoPlayer()
     player.show()
+
+    server_thread = threading.Thread(target=run_server)
+    server_thread.start()
+
     sys.exit(app.exec())
