@@ -12,7 +12,7 @@ class Robot:
         self.writer = writer  # Сохраняем объект writer для отправки сообщений
         while True:
             try:
-                data = await asyncio.wait_for(reader.read(1024), timeout=1.0)
+                data = await asyncio.wait_for(reader.read(1024), timeout=0.5)
             except asyncio.exceptions.TimeoutError:
                 print("Таймаут ожидания данных")
                 continue
@@ -23,9 +23,9 @@ class Robot:
             print(f"Получено сообщение от клиента: {message}")
             if message == "quit":
                 break
-            response = self.process_message(message)
-            writer.write(response.encode())
-            await writer.drain()
+            #response = self.process_message(message)
+            #writer.write(response.encode())
+            #await writer.drain()
         print("Закрытие соединения")
         writer.close()
 

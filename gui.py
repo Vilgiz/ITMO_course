@@ -1,7 +1,8 @@
 import sys
 from PyQt6.QtCore import QTimer, Qt
 from PyQt6.QtGui import QImage, QPixmap
-from PyQt6.QtWidgets import QApplication, QLabel, QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, QSlider
+from PyQt6.QtWidgets import QApplication, QLabel, QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, QSlider, QPushButton
+from PyQt6.QtGui import QColor, QFont
 import cv2
 import json
 from image import Image
@@ -15,9 +16,11 @@ class VideoPlayer(QMainWindow):
     def __init__(self):
         super().__init__()
         self.camera = cv2.VideoCapture(
-            "Basler_acA2000-165um__22729612__20240313_134953200.mp4")
+            "Video.avi")
 
         self.robot = Robot('127.0.0.1', 48569)
+        # self.host = '192.168.0.21'
+        # self.port = 48569
 
         self.width_frame = None
         self.height_frame = None
@@ -71,6 +74,11 @@ class VideoPlayer(QMainWindow):
             "Настройка чувствительность обнаружения № 3")
         self.blur_label = QLabel("Настройка размытия")
         self.dilate_label = QLabel("Настройка заполнения")
+        self.start_button = QPushButton("Старт")
+        self.stop_button = QPushButton("Стоп")
+        self.continue_button = QPushButton("Продолжить")
+        self.statisticks_button = QPushButton(f"Статистика\nкомплекса")
+        self.auto_correction_button = QPushButton("Автокоррекция\nкамеры")
 
         self.detect_detail_label = QLabel("Обнаружено деталей:")
 
@@ -101,6 +109,12 @@ class VideoPlayer(QMainWindow):
 
         self.info_layout.addWidget(self.detect_detail_label)
 
+        self.dop_layout.addWidget(self.start_button)
+        self.dop_layout.addWidget(self.stop_button)
+        self.dop_layout.addWidget(self.continue_button)
+        self.dop_layout.addWidget(self.statisticks_button)
+        self.dop_layout.addWidget(self.auto_correction_button)
+
     def __setting_layers(self):
         self.video_and_info_layout.addLayout(self.video_layout)
         self.video_and_info_layout.addLayout(self.info_layout)
@@ -110,6 +124,8 @@ class VideoPlayer(QMainWindow):
         self.main_layout.addLayout(self.calibration_layout)
 
     def __settings(self):
+        self.stop_button.clicked.connect(self.send_em_stop)
+        self.continue_button.clicked.connect(self.send_continue)
         self.slider_label_mapping = {
             self.brigh_fac_slider: self.brigh_fac_label,
             self.sat_fac_slider: self.sat_fac_label,
@@ -147,7 +163,30 @@ class VideoPlayer(QMainWindow):
             self.start_flag = False
 
     def __init_style(self):
-        pass
+        font = QFont("Ubuntu", 14)
+        font_min = QFont("Ubuntu", 10)
+        self.start_button.setStyleSheet(
+            "background-color: green; color: white;")
+        self.stop_button.setStyleSheet("background-color: red; color: white;")
+        self.continue_button.setStyleSheet(
+            "background-color: yellow; color: black;")
+        self.statisticks_button.setStyleSheet("color: black;")
+        self.auto_correction_button.setStyleSheet("color: black;")
+
+        self.start_button.setFont(font)
+        self.stop_button.setFont(font)
+        self.continue_button.setFont(font)
+        self.statisticks_button.setFont(font)
+        self.auto_correction_button.setFont(font)
+
+        self.brigh_fac_label.setFont(font_min)
+        self.sat_fac_label.setFont(font_min)
+        self.threshold_2_label.setFont(font_min)
+        self.threshold_3_label.setFont(font_min)
+        self.blur_label.setFont(font_min)
+        self.dilate_label.setFont(font_min)
+
+        self.detect_detail_label.setFont(font)
 
     def __init_sizes(self):
         ret, frame = self.camera.read()
@@ -158,6 +197,13 @@ class VideoPlayer(QMainWindow):
         self.height_frame, self.width_frame, _ = frame.shape
         self.video_label.setMinimumSize(
             int(self.width_frame*2), int(self.height_frame*2))
+        self.start_button.setMinimumSize(100, 100)
+        self.stop_button.setMinimumSize(100, 100)
+        self.continue_button.setMinimumSize(100, 100)
+        self.stop_button.setMinimumSize(100, 100)
+        self.continue_button.setMinimumSize(100, 100)
+        self.statisticks_button.setMinimumSize(100, 100)
+        self.auto_correction_button.setMinimumSize(100, 100)
 
     def update_frame(self):
         ret, frame = self.camera.read()
@@ -183,17 +229,19 @@ class VideoPlayer(QMainWindow):
                          bytes_per_line, QImage.Format.Format_BGR888)
 
         self.video_label.setPixmap(QPixmap.fromImage(q_image))
-        self.detect_detail_label.setText(
-            f"Обнаружено деталей: {len(self.coordinates)}")
+        self.detect_detail_label.setText(f"Обнаружено деталей: {len(self.coordinates)}\n"
+                                         f"\nТип деталей: type\n\nСтатус соединения:"
+                                         f"active\n\nCостояние робота: Moving")
         self.num_of_frame = self.num_of_frame + 1
 
-        if len(self.coordinates) != 0 and self.num_of_frame == 20:
+        if len(self.coordinates) != 0 and self.num_of_frame == 10:
             self.num_of_frame = 0
             self.robot_communication()
 
     def robot_communication(self):
         message = ";".join(("move", str(
             self.coordinates[0][1] + 7), str(self.coordinates[0][0] + 5), str(self.orientation[0])))
+        print(message)
         self.robot.send_message(message)
 
     async def start_server(self):
@@ -246,6 +294,15 @@ class VideoPlayer(QMainWindow):
         self.image.blur = self.threshold_3_value
         self.image.dilate = self.threshold_2_value
 
+    def send_em_stop(self):
+        message = ("stop;")
+        print(message)
+        self.robot.send_message(message)
+        
+    def send_continue(self):
+        message = ("continue;")
+        print(message)
+        self.robot.send_message(message)
 
 def run_server():
     asyncio.run(player.start_server())

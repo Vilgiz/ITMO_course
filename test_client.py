@@ -3,7 +3,6 @@ import time
 import asyncio
 import threading
 
-
 class RobotClient:
     def __init__(self, host, port):
         self.host = host
