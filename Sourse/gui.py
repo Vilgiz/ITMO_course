@@ -1,39 +1,42 @@
 import sys
-import threading
-import asyncio
-import json
 from PyQt6.QtCore import QTimer, Qt
-from PyQt6.QtGui import QImage, QPixmap, QColor, QFont
+from PyQt6.QtGui import QImage, QPixmap
 from PyQt6.QtWidgets import QApplication, QLabel, QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, QSlider, QPushButton
+from PyQt6.QtGui import QColor, QFont
 import cv2
+import json
 from image import Image
 from robot import Robot
+import threading
+import asyncio
 from database_show import DatabaseWindow
 
 
 class VideoPlayer(QMainWindow):
-    """Класс для создания приложения видеоплеера."""
 
     def __init__(self):
-        """Инициализация видеоплеера."""
         super().__init__()
-        self.camera = cv2.VideoCapture("Video_2.mp4")
+        self.camera = cv2.VideoCapture(
+            "Video_2.mp4")
 
-        # Создание объекта робота для взаимодействия
         self.robot = Robot('127.0.0.1', 48569)
+        # self.host = '192.168.0.21'
+        # self.port = 48569
 
-        # Инициализация параметров
         self.width_frame = None
         self.height_frame = None
+
         self.brigh_fac_value = 0
+        self.sat_fac_value = 0
         self.threshold_3_value = 0
         self.threshold_2_value = 0
         self.blur_value = 0
         self.dilate_value = 0
         self.num_of_frame = 0
-        self.start_flag = True
 
-        # Создание графического интерфейса
+        self.start_flag = True
+        self.start_robot_flag = False
+
         self.__init_main_window()
         self.__init_layouts()
         self.__init_widgets()
@@ -44,7 +47,6 @@ class VideoPlayer(QMainWindow):
         self.__settings()
 
     def __init_main_window(self):
-        """Инициализация основного окна приложения."""
         self.central_widget = QWidget(self)
         self.setCentralWidget(self.central_widget)
         self.setWindowTitle("Video")
@@ -52,17 +54,23 @@ class VideoPlayer(QMainWindow):
         self.setStyleSheet("background-color: rgba(255, 255, 255, 150);")
 
     def __init_widgets(self):
-        """Инициализация виджетов."""
         self.video_label = QLabel()
 
-        # Создание слайдеров для настройки параметров обработки изображения
         self.brigh_fac_slider = QSlider(Qt.Orientation.Horizontal)
+        self.sat_fac_slider = QSlider(Qt.Orientation.Horizontal)
         self.threshold_2_slider = QSlider(Qt.Orientation.Horizontal)
         self.threshold_3_slider = QSlider(Qt.Orientation.Horizontal)
         self.blur_slider = QSlider(Qt.Orientation.Horizontal)
         self.dilate_slider = QSlider(Qt.Orientation.Horizontal)
 
-        # Создание кнопок управления
+        self.brigh_fac_label = QLabel("Настройка яркости")
+        self.sat_fac_label = QLabel("Настройка насыщения")
+        self.threshold_2_label = QLabel(
+            "Настройка чувствительность обнаружения № 2")
+        self.threshold_3_label = QLabel(
+            "Настройка чувствительность обнаружения № 3")
+        self.blur_label = QLabel("Настройка размытия")
+        self.dilate_label = QLabel("Настройка заполнения")
         self.start_button = QPushButton("Старт")
         self.stop_button = QPushButton("Стоп")
         self.continue_button = QPushButton("Продолжить")
@@ -72,7 +80,6 @@ class VideoPlayer(QMainWindow):
         self.detect_detail_label = QLabel("Обнаружено деталей:")
 
     def __init_layouts(self):
-        """Инициализация компоновок виджетов."""
         self.main_layout = QHBoxLayout(self.central_widget)
         self.video_and_info_layout = QHBoxLayout()
         self.video_layout = QVBoxLayout()
@@ -82,12 +89,12 @@ class VideoPlayer(QMainWindow):
         self.calibration_layout = QVBoxLayout()
 
     def __addition_widgets(self):
-        """Добавление виджетов на компоновки."""
         self.video_layout.addWidget(self.video_label)
 
-        # Добавление виджетов настройки параметров
         self.calibration_layout.addWidget(self.brigh_fac_label)
         self.calibration_layout.addWidget(self.brigh_fac_slider)
+        self.calibration_layout.addWidget(self.sat_fac_label)
+        self.calibration_layout.addWidget(self.sat_fac_slider)
         self.calibration_layout.addWidget(self.threshold_2_label)
         self.calibration_layout.addWidget(self.threshold_2_slider)
         self.calibration_layout.addWidget(self.threshold_3_label)
@@ -97,7 +104,8 @@ class VideoPlayer(QMainWindow):
         self.calibration_layout.addWidget(self.dilate_label)
         self.calibration_layout.addWidget(self.dilate_slider)
 
-        # Добавление кнопок управления
+        self.info_layout.addWidget(self.detect_detail_label)
+
         self.dop_layout.addWidget(self.start_button)
         self.dop_layout.addWidget(self.stop_button)
         self.dop_layout.addWidget(self.continue_button)
@@ -105,7 +113,6 @@ class VideoPlayer(QMainWindow):
         self.dop_layout.addWidget(self.auto_correction_button)
 
     def __setting_layers(self):
-        """Настройка компоновок виджетов."""
         self.video_and_info_layout.addLayout(self.video_layout)
         self.video_and_info_layout.addLayout(self.info_layout)
         self.vid_info_and_dop_layout.addLayout(self.video_and_info_layout)
@@ -114,17 +121,16 @@ class VideoPlayer(QMainWindow):
         self.main_layout.addLayout(self.calibration_layout)
 
     def __settings(self):
-        """Настройка начальных значений и обработчиков событий."""
         self.stop_button.clicked.connect(self.send_em_stop)
         self.continue_button.clicked.connect(self.send_continue)
         self.start_button.clicked.connect(self.send_start)
         self.statisticks_button.clicked.connect(self.show_database_window)
 
-        # Маппинг слайдеров и их меток
         self.slider_label_mapping = {
             self.brigh_fac_slider: self.brigh_fac_label,
-            self.threshold_3_slider: self.threshold_3_label,
+            self.sat_fac_slider: self.sat_fac_label,
             self.threshold_2_slider: self.threshold_2_label,
+            self.threshold_3_slider: self.threshold_3_label,
             self.blur_slider: self.blur_label,
             self.dilate_slider: self.dilate_label
         }
@@ -135,21 +141,21 @@ class VideoPlayer(QMainWindow):
             slider.valueChanged.connect(self.on_slider_value_changed)
 
         if self.start_flag:
-            # Загрузка начальных значений из файла конфигурации
             with open('video_parametrs.json', 'r') as json_file:
                 try:
                     data = json.load(json_file)
                 except json.JSONDecodeError:
                     raise ValueError("Ошибка при чтении файла с данными.")
 
-            # Установка начальных значений слайдеров
             self.brigh_fac_value = data.get('brigh', [])
+            self.sat_fac_value = data.get('sat', [])
             self.threshold_3_value = data.get('threshold_3', [])
             self.threshold_2_value = data.get('threshold_2', [])
             self.blur_value = data.get('blur', [])
             self.dilate_value = data.get('dilate', [])
 
             self.brigh_fac_slider.setValue(int(self.brigh_fac_value*255/3))
+            self.sat_fac_slider.setValue(self.sat_fac_value)
             self.threshold_3_slider.setValue(self.threshold_3_value)
             self.threshold_2_slider.setValue(self.threshold_2_value)
             self.blur_slider.setValue(self.blur_value)
@@ -157,7 +163,6 @@ class VideoPlayer(QMainWindow):
             self.start_flag = False
 
     def __init_style(self):
-        """Настройка стилей виджетов."""
         font = QFont("Ubuntu", 14)
         font_min = QFont("Ubuntu", 10)
         self.start_button.setStyleSheet(
@@ -175,6 +180,7 @@ class VideoPlayer(QMainWindow):
         self.auto_correction_button.setFont(font)
 
         self.brigh_fac_label.setFont(font_min)
+        self.sat_fac_label.setFont(font_min)
         self.threshold_2_label.setFont(font_min)
         self.threshold_3_label.setFont(font_min)
         self.blur_label.setFont(font_min)
@@ -183,7 +189,6 @@ class VideoPlayer(QMainWindow):
         self.detect_detail_label.setFont(font)
 
     def __init_sizes(self):
-        """Настройка размеров виджетов."""
         ret, frame = self.camera.read()
         image = Image(frame)
         frame = image.transform_zone(frame)
@@ -201,18 +206,15 @@ class VideoPlayer(QMainWindow):
         self.auto_correction_button.setMinimumSize(100, 100)
 
     def update_frame(self):
-        """Обновление кадра видео."""
         ret, frame = self.camera.read()
         self.image = Image(frame)
 
-        # Установка параметров обработки изображения
         self.image.brightness_factor = self.brigh_fac_value
         self.image.threshold_3 = self.threshold_3_value
         self.image.threshold_2 = self.threshold_2_value
         self.image.dilate = self.dilate_value
         self.image.blur = self.blur_value
 
-        # Преобразование и обработка кадра
         frame = self.image.transform_zone(frame)
         frame = self.image.transform_chees(frame)
         frame = self.image.image_correction(frame)
@@ -226,7 +228,6 @@ class VideoPlayer(QMainWindow):
         q_image = QImage(frame.data, self.width_frame, self.height_frame,
                          bytes_per_line, QImage.Format.Format_BGR888)
 
-        # Отображение кадра в QLabel
         self.video_label.setPixmap(QPixmap.fromImage(q_image))
         self.detect_detail_label.setText(f"Обнаружено деталей: {len(self.coordinates)}\n"
                                          f"\nТип деталей: type 1\n\nСтатус соединения:"
@@ -234,28 +235,23 @@ class VideoPlayer(QMainWindow):
         self.num_of_frame = self.num_of_frame + 1
 
         if len(self.coordinates) != 0 and self.num_of_frame == 10:
-            # Отправка команды роботу каждые 10 кадров
             self.num_of_frame = 0
             self.robot_communication()
 
     def robot_communication(self):
-        """Взаимодействие с роботом."""
         message = ";".join(("move", str(
             self.coordinates[0][1] + 7), str(self.coordinates[0][0] + 5), str(self.orientation[0])))
         print(message)
         self.robot.send_message(message)
 
     async def start_server(self):
-        """Запуск сервера робота."""
         await self.robot.start_server()
 
     def closeEvent(self, event):
-        """Обработка события закрытия приложения."""
         self.robot.close_socket()
         event.accept()
 
     def on_slider_value_changed(self, value):
-        """Обработчик изменения значений слайдеров."""
         if self.start_flag == True:
             return 0
         sender_slider = self.sender()
@@ -299,7 +295,6 @@ class VideoPlayer(QMainWindow):
         self.image.dilate = self.threshold_2_value
 
     def send_start(self):
-        """Отправка команды старта."""
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_frame)
         self.timer.start(10)
@@ -308,25 +303,21 @@ class VideoPlayer(QMainWindow):
         self.robot.send_message(message)
 
     def send_em_stop(self):
-        """Отправка команды стоп."""
         message = ("stop;")
         print(message)
         self.robot.send_message(message)
 
     def send_continue(self):
-        """Отправка команды продолжить."""
         message = ("continue;")
         print(message)
         self.robot.send_message(message)
 
     def show_database_window(self):
-        """Отображение окна статистики."""
         self.database_window = DatabaseWindow()
         self.database_window.exec()
 
 
 def run_server():
-    """Запуск сервера в отдельном потоке."""
     asyncio.run(player.start_server())
 
 
@@ -335,7 +326,6 @@ if __name__ == '__main__':
     player = VideoPlayer()
     player.show()
 
-    # Запуск сервера в отдельном потоке
     server_thread = threading.Thread(target=run_server)
     server_thread.start()
 
